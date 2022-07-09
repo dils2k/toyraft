@@ -1,0 +1,17 @@
+*** States ***
+- Follower
+- Candidate
+- Leader
+
+
+All nodes start in the follower state.
+
+If follower didn't hear from the leader it can become a candidate.
+
+The candidate becomes the leader if it gets votes from a majority of nodes.
+But does it know whether it's a majority or not?
+
+
+The election timeout is the amount of time a follower waits until becoming a candidate.
+
+
