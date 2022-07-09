@@ -1,0 +1,7 @@
+Toy implementation of raft consensus algorithm.
+
+Work in progress.
+
+Learn more here: https://raft.github.io/raft.pdf
+
+
