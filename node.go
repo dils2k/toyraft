@@ -57,7 +57,7 @@ func (n *Node) requestForVotes() int {
 	for _, nodeURL := range n.nodesURLs {
 		msg, _ := json.Marshal(VoteRequest{n.termID})
 
-		go func(nodeURL string) {
+		go func(nodeURL string, voted int) {
 			defer wg.Done()
 
 			rsp, err := http.Post(nodeURL+"/requestVote", "application/json", bytes.NewBuffer(msg))
@@ -69,7 +69,7 @@ func (n *Node) requestForVotes() int {
 			if rsp.StatusCode == http.StatusOK {
 				voted++
 			}
-		}(nodeURL)
+		}(nodeURL, voted)
 	}
 
 	wg.Wait()
