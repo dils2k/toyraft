@@ -90,7 +90,6 @@ func (n *Node) Vote(term uint64) error {
 }
 
 func (n *Node) Heartbeat() error {
-	n.logger.Println("got heartbeat")
 	n.heartbeatChan <- struct{}{}
 	return nil
 }
@@ -106,16 +105,6 @@ func (n *Node) startElection() {
 	} else {
 		n.logger.Printf("node became a leader")
 		n.state = LeaderState
-	}
-}
-
-func (n *Node) heartbeatRemoteNodes() {
-	for _, rn := range n.remoteNodes {
-		go func(rn RemoteNode) {
-			if err := rn.Heartbeat(); err != nil {
-				n.logger.Printf("can't heartbeat node: %v", err)
-			}
-		}(rn)
 	}
 }
 
@@ -145,8 +134,10 @@ func (n *Node) Run(ctx context.Context) {
 			break
 		default:
 			if n.state == LeaderState {
-				n.logger.Println("sending heartbeat requests")
-				n.heartbeatRemoteNodes()
+				for _, rn := range n.remoteNodes {
+					go rn.Heartbeat()
+				}
+
 				time.Sleep(200 * time.Millisecond) // heartbeat timeout
 			}
 		}
