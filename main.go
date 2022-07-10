@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"flag"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -12,27 +17,38 @@ func init() {
 }
 
 func main() {
-	// addr := flag.String("addr", ":3000", "listen address")
-	// nodesFlag := flag.String("nodes", "", "listen address")
+	addr := flag.String("addr", ":3000", "listen address")
+	nodesFlag := flag.String("nodes", "", "external nodes")
 
-	// flag.Parse()
+	flag.Parse()
 
-	// var nodes []string
-	// if *nodesFlag == "" {
-	// 	nodes = []string{}
-	// } else {
-	// 	nodes = strings.Split(*nodesFlag, ",")
-	// }
+	node := NewNode(log.New(os.Stdout, "", log.Ltime))
 
-	node1 := NewNode(log.New(os.Stdout, "[node 1] ", log.Ltime))
-	node2 := NewNode(log.New(os.Stdout, "[node 2] ", log.Ltime))
-	node3 := NewNode(log.New(os.Stdout, "[node 3] ", log.Ltime))
+	nodesURLs := strings.Split(*nodesFlag, ",")
+	if *nodesFlag != "" {
+		for _, nurl := range nodesURLs {
+			node.AddRemoteNodes(NewHTTPRemoteNode(nurl))
+		}
+	}
 
-	node1.AddRemoteNodes(node2, node3)
-	node2.AddRemoteNodes(node1, node3)
-	node3.AddRemoteNodes(node1, node2)
+	go node.Run(context.Background())
 
-	go node1.Run()
-	go node2.Run()
-	node3.Run()
+	http.HandleFunc("/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		_ = node.Heartbeat()
+	})
+
+	http.HandleFunc("/vote", func(w http.ResponseWriter, r *http.Request) {
+		var req VoteRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := node.Vote(req.TermID); err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+	})
+
+	http.ListenAndServe(*addr, nil)
 }

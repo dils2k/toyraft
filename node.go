@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -114,7 +119,7 @@ func (n *Node) heartbeatRemoteNodes() {
 	}
 }
 
-func (n *Node) Run() {
+func (n *Node) Run(ctx context.Context) {
 	go func() {
 		for {
 			if n.state != FollowerState {
@@ -127,15 +132,63 @@ func (n *Node) Run() {
 
 			case <-time.After(n.electionTimeout):
 				n.startElection()
+
+			case <-ctx.Done():
+				break
 			}
 		}
 	}()
 
 	for {
-		if n.state == LeaderState {
-			n.logger.Println("sending heartbeat requests")
-			n.heartbeatRemoteNodes()
-			time.Sleep(200 * time.Millisecond) // heartbeat timeout
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			if n.state == LeaderState {
+				n.logger.Println("sending heartbeat requests")
+				n.heartbeatRemoteNodes()
+				time.Sleep(200 * time.Millisecond) // heartbeat timeout
+			}
 		}
 	}
+}
+
+type HTTPRemoteNode struct {
+	url string
+}
+
+func NewHTTPRemoteNode(url string) RemoteNode {
+	return &HTTPRemoteNode{url: url}
+}
+
+type VoteRequest struct {
+	TermID uint64 `json:"term_ID"`
+}
+
+func (n *HTTPRemoteNode) Vote(termID uint64) error {
+	reqJSON, _ := json.Marshal(VoteRequest{termID})
+
+	resp, err := http.Post(n.url+"/vote", "application/json", bytes.NewBuffer(reqJSON))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unsuccessful code %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (n *HTTPRemoteNode) Heartbeat() error {
+	resp, err := http.Post(n.url+"/heartbeat", "application/json", nil)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unsuccessful code %d", resp.StatusCode)
+	}
+
+	return nil
 }
