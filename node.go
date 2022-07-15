@@ -61,7 +61,6 @@ func NewNode(logger *log.Logger) *Node {
 }
 
 func (n *Node) requestForVotes() int {
-	n.termID++
 
 	var (
 		votes = 1 // the node votes for itself too
@@ -109,6 +108,7 @@ func (n *Node) Heartbeat() error {
 func (n *Node) startElection() {
 	n.logger.Printf("node became a candidate")
 	n.state = CandidateState
+	n.termID++
 
 	votes := n.requestForVotes()
 	if votes < len(n.remoteNodes)+1/2 {
@@ -133,25 +133,17 @@ func (n *Node) Run(ctx context.Context) {
 
 			case <-time.After(n.electionTimeout):
 				n.startElection()
-
-			case <-ctx.Done():
-				break
 			}
 		}
 	}()
 
 	for {
-		select {
-		case <-ctx.Done():
-			break
-		default:
-			if n.state == LeaderState {
-				for _, rn := range n.remoteNodes {
-					go rn.Heartbeat()
-				}
-
-				time.Sleep(200 * time.Millisecond) // heartbeat timeout
+		if n.state == LeaderState {
+			for _, rn := range n.remoteNodes {
+				go rn.Heartbeat()
 			}
+
+			time.Sleep(200 * time.Millisecond) // heartbeat timeout
 		}
 	}
 }
