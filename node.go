@@ -26,6 +26,12 @@ const (
 	LeaderState
 )
 
+type entry struct {
+	key    string
+	value  []byte
+	termID uint64
+}
+
 type Node struct {
 	state       State
 	remoteNodes []RemoteNode
@@ -36,6 +42,10 @@ type Node struct {
 
 	heartbeatChan chan struct{}
 
+	entries                []entry
+	currState              map[string][]byte // commited entries
+	lastCommitedEntryIndex int
+
 	logger *log.Logger
 }
 
@@ -44,7 +54,9 @@ func NewNode(logger *log.Logger) *Node {
 		state:           FollowerState,
 		electionTimeout: time.Duration(rand.Int63n(1000-500)+500) * time.Millisecond,
 		heartbeatChan:   make(chan struct{}),
-		logger:          logger,
+		entries:         make([]entry, 0),
+
+		logger: logger,
 	}
 }
 
@@ -142,6 +154,29 @@ func (n *Node) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (n *Node) RunHTTP(ctx context.Context, addr string) error {
+	go n.Run(ctx)
+
+	http.HandleFunc("/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		_ = n.Heartbeat()
+	})
+
+	http.HandleFunc("/vote", func(w http.ResponseWriter, r *http.Request) {
+		var req VoteRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := n.Vote(req.TermID); err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+	})
+
+	return http.ListenAndServe(addr, nil)
 }
 
 type HTTPRemoteNode struct {
